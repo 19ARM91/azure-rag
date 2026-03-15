@@ -9,10 +9,10 @@ from langchain.vectorstores import AzureSearch
 
 app = FastAPI()
 
-openai.api_base = os.getenv("OPENAI_API_BASE")  # Your Azure OpenAI resource's endpoint value.
-openai.api_key = os.getenv("OPENAI_API_KEY")
-openai.api_type = "azure"
-openai.api_version = "2023-05-15" 
+openai.api_base = os.getenv(http://127.0.0.1:8080/v1)  # Your Azure OpenAI resource's endpoint value.
+openai.api_key = os.getenv(sk-no-key-required)
+openai.api_type = "openai"
+openai.api_version = "v1" 
 
 embeddings = OpenAIEmbeddings(deployment="demo-embedding", chunk_size=1)
 
