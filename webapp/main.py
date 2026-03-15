@@ -7,6 +7,8 @@ from langchain.embeddings import SentenceTransformerEmbeddings
 from langchain.vectorstores import Qdrant
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
+from langchain.document_loaders import CSVLoader
+from langchain.text_splitter import CharacterTextSplitter
 
 load_dotenv(".env")
 
@@ -19,61 +21,123 @@ openai.api_version = "v1"
 
 embeddings = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# Connect to Azure Cognitive Search
-acs = AzureSearch(azure_search_endpoint=os.getenv('SEARCH_SERVICE_NAME'),
-                 azure_search_key=os.getenv('SEARCH_API_KEY'),
-                 index_name=os.getenv('SEARCH_INDEX_NAME'),
-                 embedding_function=embeddings.embed_query)
+
+qdrant_client = QdrantClient(":memory:")
+
+vector_store = Qdrant(
+    client=qdrant_client,
+    collection_name="wine_collection",
+    embeddings=embeddings
+)
 
 class Body(BaseModel):
     query: str
 
+
+# -----------------------------
+# Load embeddings helper
+# -----------------------------
+
+def load_embeddings():
+
+    print("Loading dataset...")
+
+    loader = CSVLoader("wine-ratings.csv")
+    documents = loader.load()
+
+    splitter = CharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=0
+    )
+
+    docs = splitter.split_documents(documents)
+
+    print("Creating embeddings and storing in Qdrant...")
+
+    vector_store.add_documents(docs)
+
+    print("Embeddings loaded successfully.")
+
+
+# -----------------------------
+# Run on application startup
+# -----------------------------
+
+@app.on_event("startup")
+def startup_event():
+    load_embeddings()
+
+
+# -----------------------------
+# Root redirect
+# -----------------------------
 
 @app.get('/')
 def root():
     return RedirectResponse(url='/docs', status_code=301)
 
 
+# -----------------------------
+# Ask endpoint
+# -----------------------------
+
 @app.post('/ask')
 def ask(body: Body):
-    """
-    Use the query parameter to interact with the Azure OpenAI Service
-    using the Azure Cognitive Search API for Retrieval Augmented Generation.
-    """
+
     search_result = search(body.query)
-    chat_bot_response = assistant(body.query, search_result)
-    return {'response': chat_bot_response}
+
+    response = assistant(body.query, search_result)
+
+    return {"response": response}
 
 
+# -----------------------------
+# Vector search
+# -----------------------------
 
 def search(query):
-    """
-    Send the query to Azure Cognitive Search and return the top result
-    """
-    docs = acs.similarity_search_with_relevance_scores(
+
+    docs = vector_store.similarity_search_with_relevance_scores(
         query=query,
-        k=5,
+        k=5
     )
+
     result = docs[0][0].page_content
+
+    print("Retrieved context:")
     print(result)
+
     return result
 
 
+# -----------------------------
+# LLM assistant
+# -----------------------------
+
 def assistant(query, context):
-    messages=[
-        # Set the system characteristics for this chat bot
-        {"role": "system", "content": "Asisstant is a chatbot that helps you find the best wine for your taste."},
 
-        # Set the query so that the chatbot can respond to it
-        {"role": "user", "content": query},
+    messages = [
 
-        # Add the context from the vector search results so that the chatbot can use
-        # it as part of the response for an augmented context
-        {"role": "assistant", "content": context}
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that recommends wines based on provided context."
+        },
+
+        {
+            "role": "system",
+            "content": f"Context: {context}"
+        },
+
+        {
+            "role": "user",
+            "content": query
+        }
+
     ]
 
     response = openai.ChatCompletion.create(
         model="phi-2",
-        messages=messages,
+        messages=messages
     )
+
     return response['choices'][0]['message']['content']
