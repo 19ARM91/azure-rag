@@ -3,18 +3,21 @@ import openai
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import AzureSearch
+from langchain.embeddings import SentenceTransformerEmbeddings
+from langchain.vectorstores import Qdrant
+from dotenv import load_dotenv
+from qdrant_client import QdrantClient
 
+load_dotenv(".env")
 
 app = FastAPI()
 
-openai.api_base = os.getenv(http://127.0.0.1:8080/v1)  # Your Azure OpenAI resource's endpoint value.
-openai.api_key = os.getenv(sk-no-key-required)
+openai.api_base = os.getenv("OPENAI_API_BASE")
+openai.api_key = os.getenv("OPENAI_API_KEY")
 openai.api_type = "openai"
 openai.api_version = "v1" 
 
-embeddings = OpenAIEmbeddings(deployment="demo-embedding", chunk_size=1)
+embeddings = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
 # Connect to Azure Cognitive Search
 acs = AzureSearch(azure_search_endpoint=os.getenv('SEARCH_SERVICE_NAME'),
@@ -70,7 +73,7 @@ def assistant(query, context):
     ]
 
     response = openai.ChatCompletion.create(
-        engine="demo-alfredo",
+        model="phi-2",
         messages=messages,
     )
     return response['choices'][0]['message']['content']
